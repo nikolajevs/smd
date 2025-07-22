@@ -48,7 +48,7 @@ async def process_send_label_expDate_cancel(message: Message, state: FSMContext)
 @dp.message_handler(content_types=ContentType.TEXT, state=SendLabelState.expDate)
 async def handle_label_expDate(message: types.Message, state: FSMContext):
 
-    expDateUser = datetime.strptime(message.text, "%Y-%m-%d")
+    expDateUser = datetime.strptime(message.text, "%d/%m/%Y")
 
     async with state.proxy() as data:
         data['expDate'] = expDateUser
