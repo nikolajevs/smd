@@ -1,4 +1,3 @@
-import datetime
 import os
 from aiogram.types import Message, ContentType
 from keyboards.default.markups import *
@@ -7,6 +6,7 @@ from data import config
 from handlers.user.menu import *
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters.state import StatesGroup, State
+from datetime import datetime
 
 class SendLabelState(StatesGroup):
     label = State()
@@ -48,7 +48,7 @@ async def process_send_label_expDate_cancel(message: Message, state: FSMContext)
 @dp.message_handler(content_types=ContentType.TEXT, state=SendLabelState.expDate)
 async def handle_label_expDate(message: types.Message, state: FSMContext):
 
-    expDateUser = datetime.strptime(message.text, "%d/%m/%Y")
+    expDateUser = datetime.strptime(message.text, "%d/%m/%Y").date()
 
     async with state.proxy() as data:
         data['expDate'] = expDateUser
@@ -57,7 +57,7 @@ async def handle_label_expDate(message: types.Message, state: FSMContext):
         label = data["number"]
         expDate = data["expDate"]
 
-        db.query('INSERT INTO labels VALUES (?, ?, ?, ?, ?)', (None, message.from_user.id, datetime.datetime.now(), label, expDate))
+        db.query('INSERT INTO labels VALUES (?, ?, ?, ?, ?)', (None, message.from_user.id, datetime.now(), label, expDate))
 
 
     await message.answer("Label added!", reply_markup=home_user_markup())
