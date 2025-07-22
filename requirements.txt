@@ -1,0 +1,6 @@
+aiogram
+requests
+python-dateutil
+pillow
+pytesseract
+google-genai

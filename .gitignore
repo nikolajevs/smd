@@ -1,0 +1,12 @@
+# Cache files
+__pycache__/
+
+# Project files
+*.log
+.env
+*.session
+database.db
+
+# vscode
+.vscode/
+.history/
