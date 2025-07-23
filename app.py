@@ -32,8 +32,9 @@ async def cmd_start(message: Message):
     else :
         await message.answer(f"<b>{config.bot_start_greeting}</b> <b>{message.from_user.full_name}</b>\n\n", reply_markup=home_user_markup())
 
+
 if __name__ == '__main__':
-    
+
     import dateChecker
     ex = executor.Executor(dp)
     ex.loop.create_task(dateChecker.start())

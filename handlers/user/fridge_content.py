@@ -1,16 +1,16 @@
-from aiogram.types import Message, ContentType
+from aiogram.types import Message
 from keyboards.default.markups import *
-from loader import dp, db, types, bot
+from loader import dp, db
 from data import config
 from handlers.user.menu import *
-from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
-from aiogram.utils.callback_data import CallbackData
+from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
+
 from dateChecker import delete_label_cb
 
 @dp.message_handler(text=config.fridge_content)
 async def process_labels(message: Message):
     
-    labels_res = db.fetchall('SELECT * FROM labels ORDER BY date(expDate) ASC')
+    labels_res = db.fetchall('SELECT * FROM labels ORDER BY date(expDate) DESC')
 
     if len(labels_res) == 0: await message.answer('No labels 🚫', reply_markup=home_user_markup())
     else: await show_labels(message, labels_res)

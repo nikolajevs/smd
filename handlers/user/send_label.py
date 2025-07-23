@@ -1,7 +1,6 @@
-import os
 from aiogram.types import Message, ContentType
 from keyboards.default.markups import *
-from loader import dp, db, types, bot
+from loader import dp, db, types
 from data import config
 from handlers.user.menu import *
 from aiogram.dispatcher import FSMContext
@@ -29,12 +28,19 @@ async def process_send_label_msg_cancel(message: Message, state: FSMContext):
 @dp.message_handler(content_types=ContentType.TEXT, state=SendLabelState.label)
 async def handle_label_number(message: types.Message, state: FSMContext):
     if str(message.text).isnumeric():
-        async with state.proxy() as data:
-            data['number'] = message.text
+        labelExists = db.fetchone(f'SELECT * FROM labels WHERE label = {message.text}')
+        if labelExists:
+            await message.answer("Label already exists!", reply_markup=home_user_markup())
+            await state.finish()
+            return
+        else:
+            async with state.proxy() as data:
+                data['number'] = message.text
     else:
         await message.answer("Label must be number!", reply_markup=home_user_markup())
         await state.finish()
         return
+
 
     await SendLabelState.next()
     await message.answer('Send Exp.Date', reply_markup=cancel_markup())
@@ -48,7 +54,27 @@ async def process_send_label_expDate_cancel(message: Message, state: FSMContext)
 @dp.message_handler(content_types=ContentType.TEXT, state=SendLabelState.expDate)
 async def handle_label_expDate(message: types.Message, state: FSMContext):
 
-    expDateUser = datetime.strptime(message.text, "%d/%m/%Y").date()
+    expDateUser = datetime.now().date()
+
+    try:
+        expDateUser = datetime.strptime(message.text, "%d/%m/%Y").date()    
+    except:
+        pass    
+
+    try:
+        expDateUser = datetime.strptime(message.text, "%d.%m.%Y").date()
+    except:
+        pass   
+
+    try:
+        expDateUser = datetime.strptime(message.text, "%d-%m-%Y").date()
+    except:
+        pass    
+
+    try:
+        expDateUser = datetime.strptime(message.text, "%d\%m\%Y").date()
+    except:
+        pass    
 
     async with state.proxy() as data:
         data['expDate'] = expDateUser
@@ -60,6 +86,5 @@ async def handle_label_expDate(message: types.Message, state: FSMContext):
         db.query('INSERT INTO labels VALUES (?, ?, ?, ?, ?)', (None, message.from_user.id, datetime.now(), label, expDate))
 
 
-    await message.answer("Label added!", reply_markup=home_user_markup())
+    await message.answer("Label added ✅", reply_markup=home_user_markup())
     await state.finish()
-
