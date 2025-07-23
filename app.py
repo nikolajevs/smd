@@ -1,8 +1,9 @@
+import asyncio
 import datetime
 from aiogram.types import Message
 from aiogram.utils import executor
 from handlers.user.menu import *
-from loader import dp, db
+from loader import dp, db, bot
 from data import config
 from filters import *
 import filters
@@ -33,9 +34,13 @@ async def cmd_start(message: Message):
         await message.answer(f"<b>{config.bot_start_greeting}</b> <b>{message.from_user.full_name}</b>\n\n", reply_markup=home_user_markup())
 
 
-if __name__ == '__main__':
+async def main():
 
     import dateChecker
-    ex = executor.Executor(dp)
-    ex.loop.create_task(dateChecker.start())
-    ex.start_polling()
+    await dp.start_polling(bot)
+    await dp.async_task(dateChecker.start())
+
+
+if __name__ == '__main__':
+
+    asyncio.run(main())
