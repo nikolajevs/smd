@@ -37,9 +37,8 @@ async def cmd_start(message: Message):
 async def main():
 
     import dateChecker
+    asyncio.create_task(dateChecker.start())
     await dp.start_polling(bot)
-    await dp.async_task(dateChecker.start())
-
 
 if __name__ == '__main__':
 
