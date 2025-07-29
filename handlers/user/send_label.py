@@ -1,15 +1,20 @@
 from aiogram.types import Message, ContentType
 from keyboards.default.markups import *
-from loader import dp, db, types
+from loader import dp, db, types, bot
 from data import config
 from handlers.user.menu import *
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters.state import StatesGroup, State
 from datetime import datetime
+import os
+from PIL import Image
+import pytesseract
+from google import genai
 
 class SendLabelState(StatesGroup):
     label = State()
     expDate = State()
+    confirm = State()
 
 @dp.message_handler(text=config.send_label_photo)
 async def process_send_label(message: Message, state: FSMContext):
@@ -85,6 +90,53 @@ async def handle_label_expDate(message: types.Message, state: FSMContext):
 
         db.query('INSERT INTO labels VALUES (?, ?, ?, ?, ?)', (None, message.from_user.id, datetime.now(), label, expDate))
 
-
     await message.answer("Label added ✅", reply_markup=home_user_markup())
+    await state.finish()
+
+@dp.message_handler(content_types=ContentType.PHOTO, state=SendLabelState.label)
+async def handle_label_photo(message: types.Message, state: FSMContext):
+        
+    fileID = message.photo[-1].file_id
+    file_info = await bot.get_file(fileID)
+    downloaded_file = (await bot.download_file(file_info.file_path, os.path.join(os.getcwd(), "img.jpg")))
+    image = Image.open(downloaded_file.name)
+    pytesseract.pytesseract.tesseract_cmd = '/data/data/ru.iiec.pydroid3/files/tesseract'
+    tessdata_dir_config = '--tessdata-dir "/storage/emulated/0/tessdata"'
+    text = pytesseract.image_to_string(image, lang='eng', config=tessdata_dir_config)
+    client = genai.Client(api_key="AIzaSyBjRZND0JalSXr1aDCQeXCM8sKndymvbWM")
+
+    response = client.models.generate_content(
+        model="gemini-2.5-flash",
+        contents=f"Send me back Label number and Date(DD/MM/YYYY) in YYYY-MM-DD format without comments: {text}"
+    )
+
+    if response.text:
+        responseData = response.text.partition(' ')
+        label = responseData[0]
+        expDate = responseData[2]
+        if label.isnumeric():
+            async with state.proxy() as data:
+                data['label'] = label
+                data['expDate'] = expDate
+
+            await SendLabelState.confirm.set()
+            await message.answer(f"Label: {label}\nExp.Date: {expDate}", reply_markup=submit_markup())
+        else:
+            await message.answer("Error reading image!", reply_markup=home_user_markup())
+            await state.finish() 
+            return
+    else:
+        await message.answer("Server Busy. Try again...", reply_markup=home_user_markup())
+        await state.finish()
+        return
+    
+@dp.message_handler(text=all_right_message, state=SendLabelState.confirm)
+async def handle_label_photo_ok(message: types.Message, state: FSMContext):
+    async with state.proxy() as data:
+        label = data["label"]
+        expDate = data["expDate"]
+
+    db.query('INSERT INTO labels VALUES (?, ?, ?, ?, ?)', (None, message.from_user.id, datetime.now(), label, expDate))
+
+    await message.answer("Label added!", reply_markup=home_user_markup())
     await state.finish()

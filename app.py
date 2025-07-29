@@ -1,7 +1,6 @@
 import asyncio
 import datetime
 from aiogram.types import Message
-from aiogram.utils import executor
 from handlers.user.menu import *
 from loader import dp, db, bot
 from data import config
