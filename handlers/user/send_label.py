@@ -95,29 +95,21 @@ async def handle_label_expDate(message: types.Message, state: FSMContext):
     await state.finish()
 
 def extract_text_from_label(image_path):
-    # Загружаем и обрабатываем
     img = cv2.imread(image_path)
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-    # Повышаем резкость
-    kernel = np.array([[0, -1, 0],
-                       [-1, 5,-1],
-                       [0, -1, 0]])
+    # Резкость
+    kernel = np.array([[0, -1, 0], [-1, 5,-1], [0, -1, 0]])
     sharp = cv2.filter2D(gray, -1, kernel)
 
-    # Увеличиваем масштаб
-    scale = 2
-    resized = cv2.resize(sharp, None, fx=scale, fy=scale, interpolation=cv2.INTER_LINEAR)
-
-    # Бинаризация по Отсу
-    _, thresh = cv2.threshold(resized, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-
-    # Конфигурация Tesseract
-    config = r'--oem 3 --psm 6 -c tessedit_char_blacklist=|~`@#$%^&*()_={}[]<> --tessdata-dir "/usr/share/tesseract-ocr/5/tessdata"'
+    # Увеличение и двоичная фильтрация
+    resized = cv2.resize(sharp, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
+    blur = cv2.GaussianBlur(resized, (5, 5), 0)
+    _, thresh = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
     # OCR
+    config = r'--oem 3 --psm 6 -c tessedit_char_blacklist=|~`@#$%^&*()_={}[]<> --tessdata-dir "/usr/share/tesseract-ocr/5/tessdata"'
     text = pytesseract.image_to_string(thresh, config=config)
-
     return text
 
 @dp.message_handler(content_types=ContentType.PHOTO, state=SendLabelState.label)
@@ -141,9 +133,9 @@ async def handle_label_photo(message: types.Message, state: FSMContext):
         text = extract_text_from_label(file_path)
 
         # Ищем Label и Exp. Date
-        label_match = re.search(r'Label:\s*(\d+)', text, re.IGNORECASE)
-        exp_match = re.search(r'Exp\.?\s*Date:\s*([\d./-]+)', text, re.IGNORECASE)
-
+        label_match = re.search(r'Label\s*[:\-]?\s*(\d{4,})', text, re.IGNORECASE)
+        exp_match = re.search(r'Exp\.?\s*Date\s*[:\-]?\s*([0-9]{1,2}[./\\-][0-9]{1,2}[./\\-][0-9]{2,4})', text, re.IGNORECASE)
+        
         if label_match and exp_match:
             label = label_match.group(1)
             raw_date = exp_match.group(1).replace('.', '/').replace('-', '/')
