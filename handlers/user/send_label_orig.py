@@ -7,10 +7,9 @@ from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters.state import StatesGroup, State
 from datetime import datetime
 import os
+from PIL import Image
 import pytesseract
-import cv2
-import numpy as np
-import re
+from google import genai
 
 class SendLabelState(StatesGroup):
     label = State()
@@ -94,75 +93,42 @@ async def handle_label_expDate(message: types.Message, state: FSMContext):
     await message.answer("Label added ✅", reply_markup=home_user_markup())
     await state.finish()
 
-def extract_text_from_label(image_path):
-    # Загружаем и обрабатываем
-    img = cv2.imread(image_path)
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-
-    # Повышаем резкость
-    kernel = np.array([[0, -1, 0],
-                       [-1, 5,-1],
-                       [0, -1, 0]])
-    sharp = cv2.filter2D(gray, -1, kernel)
-
-    # Увеличиваем масштаб
-    scale = 2
-    resized = cv2.resize(sharp, None, fx=scale, fy=scale, interpolation=cv2.INTER_LINEAR)
-
-    # Бинаризация по Отсу
-    _, thresh = cv2.threshold(resized, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-
-    # Конфигурация Tesseract
-    config = r'--oem 3 --psm 6 -c tessedit_char_blacklist=|~`@#$%^&*()_={}[]<> --tessdata-dir "/usr/share/tesseract-ocr/5/tessdata"'
-
-    # OCR
-    text = pytesseract.image_to_string(thresh, config=config)
-
-    return text
-
 @dp.message_handler(content_types=ContentType.PHOTO, state=SendLabelState.label)
 async def handle_label_photo(message: types.Message, state: FSMContext):
-    try:
-        file_id = message.photo[-1].file_id
-        file_info = await bot.get_file(file_id)
-        file_path = os.path.join(os.getcwd(), "img.jpg")
-        downloaded_file = await bot.download_file(file_info.file_path)
+        
+    fileID = message.photo[-1].file_id
+    file_info = await bot.get_file(fileID)
+    downloaded_file = (await bot.download_file(file_info.file_path, os.path.join(os.getcwd(), "img.jpg")))
+    image = Image.open(downloaded_file.name)
+    pytesseract.pytesseract.tesseract_cmd = '/data/data/ru.iiec.pydroid3/files/tesseract'
+    tessdata_dir_config = '--tessdata-dir "/storage/emulated/0/tessdata"'
+    text = pytesseract.image_to_string(image, lang='eng', config=tessdata_dir_config)
+    client = genai.Client(api_key="AIzaSyBjRZND0JalSXr1aDCQeXCM8sKndymvbWM")
 
-        # Сохраняем файл
-        with open(file_path, "wb") as f:
-            f.write(downloaded_file.read())
+    response = client.models.generate_content(
+        model="gemini-2.5-flash",
+        contents=f"Send me back Label number and Date(DD/MM/YYYY) in YYYY-MM-DD format without comments: {text}"
+    )
 
-        # Указываем путь к tesseract
-    #    pytesseract.pytesseract.tesseract_cmd = '/data/data/ru.iiec.pydroid3/files/tesseract'
-    #    pytesseract.pytesseract.tesseract_cmd = 'C:\\Program Files\\Tesseract-OCR\\tesseract.exe'
-        pytesseract.pytesseract.tesseract_cmd = '/usr/bin/tesseract'
-
-        # Выполняем OCR с предобработкой
-        text = extract_text_from_label(file_path)
-
-        # Ищем Label и Exp. Date
-        label_match = re.search(r'Label:\s*(\d+)', text, re.IGNORECASE)
-        exp_match = re.search(r'Exp\.?\s*Date:\s*([\d./-]+)', text, re.IGNORECASE)
-
-        if label_match and exp_match:
-            label = label_match.group(1)
-            raw_date = exp_match.group(1).replace('.', '/').replace('-', '/')
-            exp_date = datetime.strptime(raw_date, "%d/%m/%Y").strftime("%Y-%m-%d")
-
+    if response.text:
+        responseData = response.text.partition(' ')
+        label = responseData[0]
+        expDate = responseData[2]
+        if label.isnumeric():
             async with state.proxy() as data:
                 data['label'] = label
-                data['expDate'] = exp_date
+                data['expDate'] = expDate
 
             await SendLabelState.confirm.set()
-            await message.answer(f"Label: {label}\nExp.Date: {exp_date}", reply_markup=submit_markup())
+            await message.answer(f"Label: {label}\nExp.Date: {expDate}", reply_markup=submit_markup())
         else:
-            await message.answer("Не удалось найти Label или Exp. Date.", reply_markup=home_user_markup())
-            await state.finish()
-
-    except Exception as e:
-        await message.answer("Ошибка при обработке изображения.", reply_markup=home_user_markup())
-        print(f"[OCR ERROR] {e}")
+            await message.answer("Error reading image!", reply_markup=home_user_markup())
+            await state.finish() 
+            return
+    else:
+        await message.answer("Server Busy. Try again...", reply_markup=home_user_markup())
         await state.finish()
+        return
     
 @dp.message_handler(text=all_right_message, state=SendLabelState.confirm)
 async def handle_label_photo_ok(message: types.Message, state: FSMContext):
@@ -170,20 +136,7 @@ async def handle_label_photo_ok(message: types.Message, state: FSMContext):
         label = data["label"]
         expDate = data["expDate"]
 
-        labelExists = db.fetchone(f'SELECT * FROM labels WHERE label = {label}')
+    db.query('INSERT INTO labels VALUES (?, ?, ?, ?, ?)', (None, message.from_user.id, datetime.now(), label, expDate))
 
-        if labelExists:
-            await message.answer("Label already exists!", reply_markup=home_user_markup())
-            await state.finish()
-            return
-        else:
-            db.query('INSERT INTO labels VALUES (?, ?, ?, ?, ?)', (None, message.from_user.id, datetime.now(), label, expDate))
-
-            await message.answer("Label added!", reply_markup=home_user_markup())
-            await state.finish()
-
-@dp.message_handler(text=cancel_message, state=SendLabelState.confirm)
-async def process_label_txt_cancel(message: Message, state: FSMContext):
-    await message.answer('Canceled!', reply_markup=home_user_markup())
-    await SendLabelState.confirm.set()   
+    await message.answer("Label added!", reply_markup=home_user_markup())
     await state.finish()
